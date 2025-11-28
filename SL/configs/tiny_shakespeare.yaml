@@ -1,0 +1,29 @@
+model_name: tiny_shakespeare
+run_number: 5
+dataset_path: ./SL/data/tiny_shakespeare_preprocessed
+tokenizer_path: ./SL/tokenizers/tiny_shakespeare_tokenizer.json
+hardware_batch_size: 64
+effective_batch_size: 64
+d_model: 384
+num_heads: 6
+num_layers: 6
+dropout: 0.2
+seq_len: 256
+ff_d: 1536
+max_steps: 5000
+label_smoothing: 0.0
+weight_decay: 0.1
+initial_lr: 0.003
+min_lr: 0.0001
+warmup_steps: 100
+decay_steps: 5000
+current_step: 5000
+current_lr: 0.00010000119208033493
+current_sample_idx: 319936
+steps/metrics: 1
+steps/save: 10
+start_time: 2025-09-07 15:54:46.469891
+current_loss: 0.7709750533103943
+current_time: 2025-09-07 16:03:13.629697
+seed: 1337
+bias: False

@@ -1,0 +1,29 @@
+[project]
+name = "sl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "datasets>=4.1.1",
+    "flash-attn>=2.8.3",
+    "ninja>=1.13.0",
+    "packaging>=25.0",
+    "renumics-spotlight>=1.7.1",
+    "tensorboard>=2.20.0",
+    "tokenizers>=0.22.1",
+    "torch>=2.8.0",
+    "torcheval>=0.0.7",
+    "torchinfo>=1.8.0",
+    "torchvision>=0.23.0",
+    "torchviz>=0.0.3",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true

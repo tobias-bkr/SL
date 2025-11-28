@@ -1,0 +1,29 @@
+model_name: fineweb_max_7
+run_number: 1
+dataset_path: /mnt/ssd/huggingface/datasets/fineweb_preprocessed
+tokenizer_path: ./SL/tokenizers/fineweb_tokenizer_2.json
+hardware_batch_size: 16
+effective_batch_size: 512
+d_model: 1024
+num_heads: 16
+num_layers: 16
+dropout: 0.0
+seq_len: 256
+ff_d: 4096
+max_steps: 40000
+label_smoothing: 0.0
+weight_decay: 0.0
+initial_lr: 0.0003
+min_lr: 1.0e-05
+warmup_steps: 100
+decay_steps: 40000
+current_step: 18500
+current_lr: 0.00015
+current_sample_idx: 9471488
+steps/metrics: 5
+steps/save: 100
+start_time: 2025-09-13 00:30:09.144245
+current_loss: 3.6974661350250244
+current_time: 2025-09-13 09:38:29.248494
+seed: 1337
+bias: False
