@@ -24,10 +24,12 @@ from xlstm.xlstm_large.model import xLSTMLargeConfig, xLSTMLarge
 
 import os
 
+from peft import LoraConfig, EvaConfig, get_peft_model, initialize_lora_eva_weights
+
 # ========== Config ==========
 
-config_path = "SL/configs/transformer_fineweb-edu_small_v2.yaml"
-state_path = None # state_path=None will initialize a model
+config_path = "SL/configs/xlstm_large_optimal_config_2.yaml"
+state_path = "SL/checkpoints/xlstm_large_optimal_config_2/d2026-01-12|20:36:42_s1000/state.yaml" # state_path=None will initialize a model
 device = "cuda"
 torch_compile_type = "default"
 
@@ -51,9 +53,9 @@ else:
           "trained_sample_idx": -1, 
           "current_time": current_time, 
           "initialized_from": None,
-          "model_path": f"./SL/checkpoints/{c["model_name"]}/d{current_time}_s0/model.pt",
-          "optimizer_path": f"./SL/checkpoints/{c["model_name"]}/d{current_time}_s0/optimizer.pt"}
-    state_path = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
+          "model_path": f"./SL/adapters/{c["model_name"]}/d{current_time}_s0/model.pt",
+          "optimizer_path": f"./SL/adapters/{c["model_name"]}/d{current_time}_s0/optimizer.pt"}
+    state_path = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
 
 # env_variables
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -90,11 +92,34 @@ val_dataset = dataset.select(range(val_start_idx, len(dataset)))
 val_dataset.set_format(type="torch", columns=["text"], device="cpu")
 val_loader = DataLoader(val_dataset, batch_size=c["hardware_batch_size"], pin_memory=True, num_workers=8)
 
+eva_dataset = dataset.select(range(sc["trained_sample_idx"] + 1, sc["trained_sample_idx"] + 1 + 10000))
+eva_dataset.set_format(type="torch", columns=["text"], device="cpu")
+# remove last element from each sequence
+eva_dataset = eva_dataset.map(lambda x: {"text": x["text"][:-1]})
+eva_dataset = eva_dataset.rename_column("text", "x")
+eva_loader = DataLoader(eva_dataset, batch_size=c["hardware_batch_size"], pin_memory=True, num_workers=8)
+
 # model
 match(c["model_type"]):
     case "transformer":
         bot = modules.transformer(c)
         bot = torch.compile(bot, mode=torch_compile_type)
+        # try loading parameters
+        try:
+            bot.load_state_dict(torch.load(sc["model_path"], weights_only=True))
+        except FileNotFoundError:
+            print(f"Model {sc["model_path"]} does not exist yet, a new one will be created")
+
+        eva_config = EvaConfig()
+        lora_config = LoraConfig( 
+            r=16,
+            # no embedding, pos_encoding or layernorms
+            target_modules=["qkv_projection", "final_projection", "l1", "l2"],
+            init_lora_weights="eva",
+            eva_config=eva_config
+        )
+        peft_bot = get_peft_model(bot, lora_config)
+        initialize_lora_eva_weights(peft_bot, eva_loader, prepare_model_inputs_fn = None, prepare_layer_inputs_fn = None)
         bot.train()
     case "xlstm":
         # configure the model with TFLA Triton kernels
@@ -112,17 +137,35 @@ match(c["model_type"]):
         # instantiate the model
         bot = xLSTMLarge(xlstm_config)
         bot = torch.compile(bot, mode=torch_compile_type)
+        # try loading parameters
+        try:
+            bot.load_state_dict(torch.load(sc["model_path"], weights_only=True))
+        except FileNotFoundError:
+            print(f"Model {sc["model_path"]} does not exist yet, a new one will be created")
+
+        target_modules = []
+        for name, module in bot.named_modules():
+            if(name != "embedding" 
+               and name.find("norm") == -1 
+               and name.find("backend") == -1 
+               and name != "lm_head" 
+               and name.count(".") == 4
+               and name.find("")):
+                target_modules.append(name)
+
+        eva_config = EvaConfig()
+        lora_config = LoraConfig( 
+            r=16,
+            # no embedding, pos_encoding or layernorms
+            target_modules=["q", "k", "v", "preact", "out_proj", "proj_up_gate", "proj_up", "proj_down"],
+            # init_lora_weights="eva",
+            # eva_config=eva_config
+        )
+        peft_bot = get_peft_model(bot, lora_config)
+        # initialize_lora_eva_weights(peft_bot, eva_loader, prepare_model_inputs_fn = None, prepare_layer_inputs_fn = None)
+        bot.train()
     case _:
-        raise ValueError("unknown model type")
-
-print(f"Parameters with weigth sharing: {sum(p.numel() for p in bot.parameters())}")
-print(f"Trainable parameters with weigth sharing: {sum(p.numel() for p in bot.parameters() if p.requires_grad)}")
-
-# try loading parameters
-try:
-    bot.load_state_dict(torch.load(sc["model_path"], weights_only=True))
-except FileNotFoundError:
-    print(f"Model {sc["model_path"]} does not exist yet, a new one will be created")
+        raise ValueError("unknown optimizer")
 
 loss_function = torch.nn.CrossEntropyLoss(
     reduction="mean", label_smoothing=c["label_smoothing"])
@@ -138,19 +181,19 @@ match(c["optimizer"]):
                                     ,eps=10e-9, fused=True, weight_decay=c["weight_decay"])
     case _:
         raise ValueError("unknown optimizer")
-try:
-    optimizer.load_state_dict(torch.load(sc["optimizer_path"], weights_only=True))
-except FileNotFoundError:
-    print("Optimizer does not exist, a new one will be created")
+# try:
+#     optimizer.load_state_dict(torch.load(sc["optimizer_path"], weights_only=True))
+# except FileNotFoundError:
+#     print("Optimizer does not exist, a new one will be created")
 
 # if initialized from something, set paths to new directory after loading weights
 if(sc["initialized_from"] is not None):
-    state_path = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
-    sc["model_path"] = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/model.pt"
-    sc["optimizer_path"] = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/optimizer.pt"
+    state_path = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
+    sc["model_path"] = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/model.pt"
+    sc["optimizer_path"] = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/optimizer.pt"
 
 # save state config
-os.makedirs(f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}")
+os.makedirs(f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}")
 with open(state_path, "w") as StateConfigFile:
     yaml.safe_dump(sc, StateConfigFile, sort_keys=False)
 
@@ -158,7 +201,7 @@ with open(state_path, "w") as StateConfigFile:
 torch.save(bot.state_dict(), sc["model_path"])
 torch.save(optimizer.state_dict(), sc["optimizer_path"])
 
-writer = SummaryWriter(log_dir=f"./SL/runs/{c["model_name"]}_{current_time}/")
+writer = SummaryWriter(log_dir=f"./SL/runs/{c["model_name"]}_adapters/")
 start = time.perf_counter()
 
 # ========== Functions ==========
@@ -268,12 +311,12 @@ for iteration, batch in enumerate(train_loader, start = sc["trained_steps"] * nu
             old_optimizer_path = sc["optimizer_path"]
 
             sc["initialized_from"] = state_path
-            state_path = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
-            sc["model_path"] = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/model.pt"
-            sc["optimizer_path"] = f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/optimizer.pt"
+            state_path = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/state.yaml"
+            sc["model_path"] = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/model.pt"
+            sc["optimizer_path"] = f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}/optimizer.pt"
 
             # make directory to save to
-            os.makedirs(f"./SL/checkpoints/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}")
+            os.makedirs(f"./SL/adapters/{c["model_name"]}/d{sc["current_time"]}_s{sc["trained_steps"]}")
 
             torch.save(bot.state_dict(), sc["model_path"])
             torch.save(optimizer.state_dict(), sc["optimizer_path"])

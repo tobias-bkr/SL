@@ -1,0 +1,35 @@
+# general
+model_name: transformer_tinystories_small_v2 # should be architecture_dataset_size_v{version}
+dataset_path: /home/spexx/Desktop/ssd/huggingface/datasets/TinyStories_preprocessed
+tokenizer_path: /home/spexx/Desktop/ssd/Code/ArtI/SL/SL/tokenizers/TinyStories_tokenizer_2.json
+steps/metrics: 5
+steps/eval: 100
+steps/save: 1000 
+# only keeps the most recent checkpoint, saves disk space
+delete_old_checkpoints: True
+
+# model
+model_type: transformer
+d_model: 256 # also called hidden dimension (h)
+num_heads: 8 # head_dim = d_model / num_heads; flash attention works up to head_dim<=256
+num_layers: 16
+dropout: 0.0
+seq_len: 256
+ff_d: 1024 # (4*d_model)
+bias: False
+
+# training
+seed: 1337
+validation_size: 0.001 # as a ratio
+
+hardware_batch_size: 128 # essentially trades compute for memory
+effective_batch_size: 512
+max_steps: 3900 # fineweb(-edu) 10BT has about 80k steps at 512 effective batch size and seq len of 256 (depending on tokenizer)
+warmup_steps: 120 # around 3% to 5% of total steps?
+decay_steps: 3900
+
+optimizer: Adam
+label_smoothing: 0.0
+weight_decay: 0.0
+initial_lr: 0.003  
+min_lr: 0.0001 

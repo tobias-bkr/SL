@@ -3,11 +3,13 @@ model_name: fineweb_transfomer_max_v8 # should be dataset_architecture_size_v{ve
 dataset_path: /mnt/ssd/huggingface/datasets/fineweb_preprocessed
 tokenizer_path: ./SL/tokenizers/fineweb_tokenizer_2.json
 steps/metrics: 5
+steps/eval: 100
 steps/save: 1000 
 # only keeps the most recent checkpoint, saves disk space
 delete_old_checkpoints: True
 
 # model
+model_type: transformer
 d_model: 1024 # also called hidden dimension (h)
 num_heads: 16 # head_dim = d_model / num_heads; flash attention works up to head_dim<=256
 num_layers: 16
@@ -18,11 +20,12 @@ bias: False
 
 # training
 seed: 1337
+validation_size: 0.001 # as a ratio
 
 hardware_batch_size: 16 # essentially trades compute for memory
 effective_batch_size: 512
 max_steps: 40000 # fineweb 10BT has about 80k steps at 512 effective batch size (depending on tokenizer)
-warmup_steps: 100
+warmup_steps: 100 # around 3% to 5% of total steps?
 decay_steps: 40000
 
 optimizer: Adam

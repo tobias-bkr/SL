@@ -1,0 +1,41 @@
+# general
+model_name: xlstm_large_template_config # should be dataset_architecture_size_v{version}
+dataset_path: /mnt/ssd/huggingface/datasets/fineweb_preprocessed
+tokenizer_path: ./SL/tokenizers/fineweb_tokenizer_2.json
+steps/metrics: 5
+steps/eval: 100
+steps/save: 1000 
+# only keeps the most recent checkpoint, saves disk space
+delete_old_checkpoints: True
+
+# model
+model_type: xlstm
+d_model: 512 # also called hidden dimension (h)
+num_heads: 8 # head_dim = d_model / num_heads; flash attention works up to head_dim<=256
+num_layers: 8
+dropout: 0.0
+seq_len: 256
+ff_d: 4096 # (4*d_model)
+bias: False
+
+# mode train needs return last states to be true
+return_last_states: True
+chunkwise_kernel: "chunkwise--triton_xl_chunk" # xl_chunk == TFLA kernels
+sequence_kernel: "native_sequence__triton"
+step_kernel: "triton"
+
+# training
+validation_size: 0.001 # as a ratio
+seed: 1337
+
+hardware_batch_size: 16 # essentially trades compute for memory
+effective_batch_size: 512
+max_steps: 100000 # fineweb 10BT has about 80k steps at 512 effective batch size (depending on tokenizer)
+warmup_steps: 100 # around 3% to 5% of total steps?
+decay_steps: 40000
+
+optimizer: Adam
+label_smoothing: 0.0
+weight_decay: 0.0
+initial_lr: 0.0006  
+min_lr: 0.00001 

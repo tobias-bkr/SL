@@ -1,0 +1,37 @@
+# general
+model_name: fineweb_max_7_adapter_eva_2 # should be dataset_architecture_size_v{version}
+dataset_path: "./SL/data/smoltalk_preprocessed"
+tokenizer_path: ./SL/tokenizers/fineweb_tokenizer_2.json
+steps/metrics: 5
+steps/eval: 100
+steps/save: 100
+# only keeps the most recent checkpoint, saves disk space
+delete_old_checkpoints: True
+
+# model
+model_type: transformer
+d_model: 1024 # also called hidden dimension (h)
+num_heads: 16 # head_dim = d_model / num_heads; flash attention works up to head_dim<=256
+num_layers: 16
+dropout: 0.0
+seq_len: 256
+ff_d: 4096 # (4*d_model)
+bias: False
+
+# training
+seed: 1337
+validation_size: 0.003 # as a ratio
+
+hardware_batch_size: 16 # essentially trades compute for memory
+effective_batch_size: 512
+# fineweb 10BT has about 80k steps at 512 effective batch size (depending on tokenizer)
+# smoltalk about 8k
+max_steps: 8000
+warmup_steps: 300
+decay_steps: 8000
+
+optimizer: Adam
+label_smoothing: 0.0
+weight_decay: 0.0
+initial_lr: 0.0006  
+min_lr: 0.00001 

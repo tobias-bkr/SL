@@ -4,6 +4,7 @@ dataset_path: /mnt/ssd/huggingface/datasets/TinyStories_preprocessed/
 tokenizer_path: ./SL/tokenizers/TinyStories_tokenizer_2.json
 hardware_batch_size: 64
 effective_batch_size: 512
+model_type: transformer
 d_model: 512
 num_heads: 8
 num_layers: 8

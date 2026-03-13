@@ -4,6 +4,7 @@ dataset_path: /mnt/ssd/huggingface/datasets/fineweb_preprocessed
 tokenizer_path: ./SL/tokenizers/fineweb_tokenizer_2.json
 hardware_batch_size: 16
 effective_batch_size: 512
+model_type: transformer
 d_model: 1024
 num_heads: 16
 num_layers: 16

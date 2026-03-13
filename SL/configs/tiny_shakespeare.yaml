@@ -4,6 +4,7 @@ dataset_path: ./SL/data/tiny_shakespeare_preprocessed
 tokenizer_path: ./SL/tokenizers/tiny_shakespeare_tokenizer.json
 hardware_batch_size: 64
 effective_batch_size: 64
+model_type: transformer
 d_model: 384
 num_heads: 6
 num_layers: 6

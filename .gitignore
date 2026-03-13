@@ -11,3 +11,6 @@ wheels/
 
 # Models
 SL/checkpoints
+SL/adapters
+SL/data/fineweb-edu_preprocessed
+SL/data/smoltalk_preprocessed

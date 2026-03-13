@@ -15,12 +15,14 @@ from tokenizers import Tokenizer
 # downloaded already IN("roneneldan/TinyStories", "HuggingFaceFW/fineweb")
 # or local path to a huggingface dataset (in that case dataset_version probably needs to be "default")
 # or local path to a .txt
-dataset_name = "./SL/data/tiny_shakespeare.txt"
-dataset_is_file = True # set True only if the dataset_name is a local .txt file path
-dataset_save_path = "./SL/data/tiny_shakespeare_preprocessed"
+dataset_name = "HuggingFaceFW/fineweb-edu"
+dataset_is_file = False # set True only if the dataset_name is a local .txt file path
+dataset_save_path = "./SL/data/fineweb-edu_preprocessed"
 dataset_version="sample-10BT"
 dataset_split = "train"
-tokenizer = Tokenizer.from_file("./SL/tokenizers/tiny_shakespeare_tokenizer.json")
+text_column_name = "text"
+cast_to_string = False
+tokenizer = Tokenizer.from_file("SL/tokenizers/fineweb-edu_tokenizer_1.json")
 seq_len = 256 # seq_len that will be used for training
 delimiter = 5 # id to give the delimiter, should be [DOC] token in the tokenizer
 
@@ -29,8 +31,13 @@ delimiter = 5 # id to give the delimiter, should be [DOC] token in the tokenizer
 def tokenize_group_and_separate(examples):
     global seq_len
     global delimiter
+    global cast_to_string
+    global text_column_name
 
-    chunks = tokenizer.encode_batch(examples["text"])
+    if(cast_to_string == True):
+        examples[text_column_name] = [str(example) for example in examples[text_column_name]]
+
+    chunks = tokenizer.encode_batch(examples[text_column_name])
     ids = list(chain.from_iterable((chunk.ids + [delimiter]) for chunk in chunks))
     arr = np.array(ids, dtype=np.int32)
     # number of full sequences
@@ -59,7 +66,7 @@ dataset = dataset.map(
     remove_columns=dataset.column_names,
     num_proc=8,                   # match physical cores
     load_from_cache_file=True,
-    writer_batch_size=100_000,    # reduce I/O syncs
+    writer_batch_size=32768,    # reduce I/O syncs
 )
  
 dataset.save_to_disk(dataset_save_path)

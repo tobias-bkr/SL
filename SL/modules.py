@@ -5,8 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from flash_attn import flash_attn_qkvpacked_func
-
 # ========== Positional Encoding ==========
 
 class PositionalEncoding(nn.Module):
@@ -130,20 +128,23 @@ class flash_attention_block(nn.Module):
 
     def forward(self, token_embeddings):
         # input shape (batch, seq_len, d_model)
-        batch_size = token_embeddings.size(0)
-        S = token_embeddings.size(1)
+        B, S, D = token_embeddings.size()
         # project token_embeddings into q,k,v
-        # resulting shape: (batch, seq_len, d_model * 3)
+        # (B, S, D) -> (B, S, D * 3)
         projection = self.qkv_projection(token_embeddings)
-        projection = projection.reshape(batch_size, S, 3, self.d_model)
-        projection = projection.reshape(
-            batch_size, S, 3, self.num_heads, self.head_dim)
+        projection = projection.reshape(B, S, 3, self.num_heads, self.head_dim)
+        # (B, S, 3, self.num_heads, self.head_dim) -> (B, 3, self.num_heads, S, self.head_dim)
+        projection = projection.permute(0, 2, 3, 1, 4)
+        q, k, v = projection.unbind(1)
 
         # at short sequence lengths (<1k), this isnt actually much faster
-        embedding_matrix = flash_attn_qkvpacked_func(
-            projection, self.dropout, causal=True)
+        embedding_matrix = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v,
+            dropout_p=self.dropout, is_causal=True)
 
-        embedding_matrix = embedding_matrix.reshape(batch_size, S, -1)
+        # (B, self.num_heads, S, self.head_dim) -> (B, S, self.num_heads, self.head_dim)
+        embedding_matrix = embedding_matrix.permute(0, 2, 1, 3)
+        embedding_matrix = embedding_matrix.reshape(B, S, -1)
         # learned linear projection
         embedding_matrix = self.final_projection(embedding_matrix)
 
@@ -197,6 +198,8 @@ class transformer(nn.Module):
         # gpt2 uses learned positional encoding
         self.pos_encoding = nn.Embedding(self.c["seq_len"], self.c["d_model"])
         torch.nn.init.normal_(self.pos_encoding.weight, mean=0.0, std=0.02)
+        # if bias equals false we center then scale and then only rescale
+        # this way we have hidden_d parameters per layer norm and not 2*hidden_d
         self.layer_norms = nn.ModuleList(
             [nn.LayerNorm(self.c["d_model"], bias=self.c["bias"]) for _ in range((self.c["num_layers"] * 2) + 1)])
 
@@ -212,11 +215,14 @@ class transformer(nn.Module):
         self.unembedding_matrix.weight = self.embedding_matrix.weight
         pass
 
-    def forward(self, token_matrix):
+    def forward(self, token_matrix=None, text=None):
         """
         Arguments:
             token_matrix - matrix of size batch, seq_len, vocab_size
         """
+        if(text is not None):
+            token_matrix = text
+
         S = token_matrix.size(1)
 
         pos = torch.arange(0, S, dtype=torch.long, device="cuda") # shape (t)
